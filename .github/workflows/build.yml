@@ -4,23 +4,27 @@ on:
   workflow_dispatch:
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      - run: unzip -q jarvis_app.zip
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: 17
-      - uses: android-actions/setup-android@v3
-      - uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: "8.7"
-      - run: gradle assembleDebug --no-daemon
+      - name: Unzip project
+        run: unzip -q jarvis_app.zip && ls jarvis_android
+      - name: Build APK
         working-directory: jarvis_android
         env:
           JARVIS_URL: ${{ secrets.JARVIS_URL }}
           JARVIS_TOKEN: ${{ secrets.JARVIS_TOKEN }}
+        run: |
+          set -o pipefail
+          export JAVA_HOME="$JAVA_HOME_17_X64"
+          export PATH="$JAVA_HOME/bin:$PATH"
+          curl -sSL -o /tmp/gradle.zip https://services.gradle.org/distributions/gradle-8.7-bin.zip
+          unzip -q /tmp/gradle.zip -d /tmp
+          /tmp/gradle-8.7/bin/gradle assembleDebug --no-daemon --console=plain 2>&1 | tee /tmp/build.log
+      - name: Show error summary
+        if: failure()
+        run: |
+          grep -E "error:|^e: |FAILED|What went wrong" -A3 /tmp/build.log | head -40 | while read -r l; do echo "::error::$l"; done
       - uses: actions/upload-artifact@v4
         with:
           name: jarvis-apk
